@@ -11,6 +11,9 @@ import { UserFacingError } from "../jobs/tasks.js";
 
 const MAX_BYTES = 1024 ** 3; // 1 GB
 const MAX_REDIRECTS = 5;
+// Whole-download deadline (redirects + headers + body). The socket `timeout` alone is an idle
+// timeout, so a server trickling bytes could otherwise hold a download open forever.
+const DOWNLOAD_TIMEOUT_MS = 180_000;
 
 const TYPE_EXT: Record<string, string> = {
   "image/png": ".png",
@@ -81,7 +84,7 @@ const publicLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
-function request(url: URL): Promise<IncomingMessage> {
+function request(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return Promise.reject(new UserFacingError(`Unsupported URL scheme: ${url.protocol}`));
   }
@@ -90,20 +93,21 @@ function request(url: URL): Promise<IncomingMessage> {
   if (isIP(host) && isPrivateAddress(host)) return Promise.reject(privateHostError(url.hostname));
   const get = url.protocol === "https:" ? httpsGet : httpGet;
   return new Promise((resolve, reject) => {
-    const req = get(url, { lookup: publicLookup, timeout: 60_000 }, resolve);
+    const req = get(url, { lookup: publicLookup, timeout: 60_000, signal }, resolve);
     req.on("timeout", () => req.destroy(new UserFacingError(`Download of ${url.href} timed out.`)));
     req.on("error", reject);
   });
 }
 
 // Follows redirects by hand so every hop goes through the same checks.
-async function getPublic(source: string): Promise<IncomingMessage> {
+async function getPublic(source: string, signal: AbortSignal): Promise<IncomingMessage> {
   let url = new URL(source);
   for (let hop = 0; ; hop++) {
     let res: IncomingMessage;
     try {
-      res = await request(url);
+      res = await request(url, signal);
     } catch (err) {
+      if (signal.aborted) throw timedOut(source, signal);
       throw err instanceof UserFacingError ? err : new UserFacingError(`Couldn't download ${source}: ${(err as Error).message}`);
     }
     const status = res.statusCode ?? 0;
@@ -119,9 +123,13 @@ async function getPublic(source: string): Promise<IncomingMessage> {
  * Fetches a public http(s) URL or copies a local file to `destBase` + detected extension.
  * Returns the written path.
  */
-export async function fetchMedia(source: string, destBase: string): Promise<string> {
+const timedOut = (source: string, signal: AbortSignal) =>
+  signal.reason instanceof UserFacingError ? signal.reason : new UserFacingError(`Download of ${source} timed out.`);
+
+export async function fetchMedia(source: string, destBase: string, { timeoutMs = DOWNLOAD_TIMEOUT_MS } = {}): Promise<string> {
   if (/^https?:\/\//i.test(source)) {
-    const res = await getPublic(source);
+    const signal = AbortSignal.timeout(timeoutMs);
+    const res = await getPublic(source, signal);
     const status = res.statusCode ?? 0;
     const type = res.headers["content-type"] ?? null;
     if (status < 200 || status >= 300) {
@@ -143,9 +151,10 @@ export async function fetchMedia(source: string, destBase: string): Promise<stri
       },
     });
     try {
-      await pipeline(res, limit, createWriteStream(dest));
+      await pipeline(res, limit, createWriteStream(dest), { signal });
     } catch (err) {
       await rm(dest, { force: true });
+      if (signal.aborted) throw timedOut(source, signal);
       throw err instanceof UserFacingError ? err : new UserFacingError(`Download of ${source} was interrupted.`);
     }
     return dest;
