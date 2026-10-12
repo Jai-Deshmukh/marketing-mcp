@@ -1,0 +1,33 @@
+{
+  "_todo": "Replace placeholder values with the real Hyv brand values.",
+  "colors": {
+    "primary": "#TODO",
+    "secondary": "#TODO",
+    "accent": "#TODO",
+    "background": "#FFFFFF",
+    "text": "#111111"
+  },
+  "fonts": {
+    "heading": { "family": "TODO", "file": "assets/fonts/TODO.ttf" },
+    "body": { "family": "TODO", "file": "assets/fonts/TODO.ttf" }
+  },
+  "logo": {
+    "on_dark": "assets/logo-white.png",
+    "on_light": "assets/logo-dark.png"
+  },
+  "end_card": {
+    "file": "assets/end-card.png",
+    "duration_s": 2
+  },
+  "captions": {
+    "font": "body",
+    "color": "#FFFFFF",
+    "outline": "#000000",
+    "max_chars_per_line": 32
+  },
+  "safe_zones": {
+    "9:16": { "top_pct": 14, "bottom_pct": 20, "side_pct": 6 },
+    "16:9": { "top_pct": 6, "bottom_pct": 10, "side_pct": 5 },
+    "1:1": { "top_pct": 8, "bottom_pct": 12, "side_pct": 6 }
+  }
+}
