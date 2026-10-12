@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkScript, checkShotList } from "../src/checks.js";
-import type { Script, ShotList } from "../src/schemas.js";
+import { Script as ScriptSchema, type Script, type ShotList } from "../src/schemas.js";
 
 const script: Script = {
   title: "Ask your circle",
@@ -70,5 +70,13 @@ describe("checkShotList", () => {
   it("flags duplicate shot ids", () => {
     const dup = { ...shotList, shots: [...shotList.shots.slice(0, 4), { ...shotList.shots[4], id: "sh1" }] };
     expect(checkShotList(dup, script).errors.join()).toMatch(/Duplicate shot ids: sh1/);
+  });
+});
+
+describe("ids", () => {
+  it("rejects scene ids that could escape the job folder", () => {
+    const bad = { ...script, scenes: [{ ...script.scenes[0], id: "../../etc" }] };
+    expect(ScriptSchema.safeParse(bad).success).toBe(false);
+    expect(ScriptSchema.safeParse(script).success).toBe(true);
   });
 });

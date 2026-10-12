@@ -5,8 +5,11 @@ export const Platform = z.enum(["instagram", "youtube_shorts", "youtube", "linke
 export const Language = z.enum(["en", "hi", "hinglish"]);
 export const AspectRatio = z.enum(["9:16", "16:9", "1:1"]);
 
+// Ids become file names (assets/<shot_id>.png, audio/vo_<scene_id>.wav), so keep them path-safe.
+const Id = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/, "Use 1-40 letters, numbers, - or _");
+
 export const Scene = z.object({
-  id: z.string().min(1).describe('Short id, e.g. "s1"'),
+  id: Id.describe('Short id, e.g. "s1"'),
   duration_s: z.number().positive(),
   vo: z.string().describe("Voiceover line for this scene; empty string if none"),
   on_screen_text: z.string().optional().describe("Short text overlay, a few words"),
@@ -27,8 +30,8 @@ export const Camera = z.object({
 });
 
 export const Shot = z.object({
-  id: z.string().min(1).describe('Short id, e.g. "sh1"'),
-  scene_id: z.string().min(1).describe("Scene this shot belongs to"),
+  id: Id.describe('Short id, e.g. "sh1"'),
+  scene_id: Id.describe("Scene this shot belongs to"),
   description: z.string().min(1),
   camera: Camera,
   duration_s: z.number().positive(),

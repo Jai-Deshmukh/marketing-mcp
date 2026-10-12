@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { captionCues, chunkText, titleCues } from "../src/media/captions.js";
-import { extFor, kindForExt } from "../src/media/download.js";
+import { extFor, fetchMedia, isPrivateAddress, kindForExt } from "../src/media/download.js";
 import { contrastText, hexOr, kenBurnsFilter, reframeFilter } from "../src/media/layout.js";
 import { listTracks, moods, pickTrack } from "../src/music.js";
 import type { Script } from "../src/schemas.js";
@@ -76,6 +76,23 @@ describe("download helpers", () => {
     expect(extFor(null, "/Users/me/a.txt")).toBeUndefined();
     expect(kindForExt(".JPG")).toBe("image");
     expect(kindForExt(".mov")).toBe("video");
+  });
+});
+
+describe("download safety", () => {
+  it("classifies private and public addresses", () => {
+    for (const ip of ["127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.1.5", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1"]) {
+      expect(isPrivateAddress(ip), ip).toBe(true);
+    }
+    for (const ip of ["8.8.8.8", "172.32.0.1", "104.18.2.3", "2606:4700::1111"]) {
+      expect(isPrivateAddress(ip), ip).toBe(false);
+    }
+  });
+
+  it("refuses local-network URLs and non-http schemes before connecting", async () => {
+    await expect(fetchMedia("http://127.0.0.1:8765/a.png", "/tmp/x")).rejects.toThrow(/local or private network/);
+    await expect(fetchMedia("http://169.254.169.254/latest/meta-data", "/tmp/x")).rejects.toThrow(/local or private network/);
+    await expect(fetchMedia("http://localhost/a.png", "/tmp/x")).rejects.toThrow(/local or private network/);
   });
 });
 

@@ -1,11 +1,14 @@
+import { lookup } from "node:dns/promises";
 import { createWriteStream } from "node:fs";
 import { copyFile, rm, stat } from "node:fs/promises";
+import { isIP } from "node:net";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { UserFacingError } from "../jobs/tasks.js";
 
 const MAX_BYTES = 1024 ** 3; // 1 GB
+const MAX_REDIRECTS = 5;
 
 const TYPE_EXT: Record<string, string> = {
   "image/png": ".png",
@@ -36,18 +39,63 @@ export function extFor(contentType: string | null, source: string): string | und
   return kindForExt(ext) ? ext : undefined;
 }
 
+// Loopback, private, link-local (incl. cloud metadata 169.254.169.254), CGNAT, multicast and reserved ranges.
+export function isPrivateAddress(ip: string): boolean {
+  const v4 = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+  if (isIP(v4) === 4) {
+    const [a, b] = v4.split(".").map(Number);
+    return (
+      a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)
+    );
+  }
+  const v6 = ip.toLowerCase();
+  return v6 === "::" || v6 === "::1" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6) || v6.startsWith("ff");
+}
+
+// Generated media lives on public CDNs; refuse anything that resolves into the local network.
+async function assertPublicUrl(url: URL): Promise<void> {
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new UserFacingError(`Unsupported URL scheme: ${url.protocol}`);
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  let addresses: { address: string }[];
+  try {
+    addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
+  } catch {
+    throw new UserFacingError(`Couldn't resolve ${url.hostname}.`);
+  }
+  if (addresses.some((a) => isPrivateAddress(a.address))) {
+    throw new UserFacingError(
+      `${url.hostname} is a local or private network address. Only public URLs can be downloaded; for a file on this Mac, pass its absolute path instead.`,
+    );
+  }
+}
+
+// Follows redirects by hand so every hop is checked against the private-address rule.
+async function fetchPublic(source: string): Promise<Response> {
+  let url = new URL(source);
+  for (let hop = 0; ; hop++) {
+    await assertPublicUrl(url);
+    let res: Response;
+    try {
+      res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(180_000) });
+    } catch (err) {
+      throw new UserFacingError(`Couldn't download ${source}: ${(err as Error).message}`);
+    }
+    const location = res.headers.get("location");
+    if (res.status < 300 || res.status >= 400 || !location) return res;
+    if (hop >= MAX_REDIRECTS) throw new UserFacingError(`Too many redirects for ${source}.`);
+    url = new URL(location, url);
+  }
+}
+
 /**
- * Fetches an http(s) URL or copies a local file to `destBase` + detected extension.
+ * Fetches a public http(s) URL or copies a local file to `destBase` + detected extension.
  * Returns the written path.
  */
 export async function fetchMedia(source: string, destBase: string): Promise<string> {
   if (/^https?:\/\//i.test(source)) {
-    let res: Response;
-    try {
-      res = await fetch(source, { redirect: "follow", signal: AbortSignal.timeout(180_000) });
-    } catch (err) {
-      throw new UserFacingError(`Couldn't download ${source}: ${(err as Error).message}`);
-    }
+    const res = await fetchPublic(source);
     if (!res.ok || !res.body) throw new UserFacingError(`Download failed (HTTP ${res.status}) for ${source}. The link may have expired.`);
     const ext = extFor(res.headers.get("content-type"), source);
     if (!ext) throw new UserFacingError(`${source} is not an image or video (content-type ${res.headers.get("content-type")}).`);
