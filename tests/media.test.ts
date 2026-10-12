@@ -81,7 +81,14 @@ describe("download helpers", () => {
 
 describe("download safety", () => {
   it("classifies private and public addresses", () => {
-    for (const ip of ["127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.1.5", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1"]) {
+    const blocked = [
+      "127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.1.5", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "::",
+      "fd00::1", "fe80::1", "ff02::1",
+      // IPv6 forms that embed IPv4 (these slipped past the old string-prefix check)
+      "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "64:ff9b::7f00:1", "2002:7f00:1::", "::127.0.0.1",
+      "not-an-ip",
+    ];
+    for (const ip of blocked) {
       expect(isPrivateAddress(ip), ip).toBe(true);
     }
     for (const ip of ["8.8.8.8", "172.32.0.1", "104.18.2.3", "2606:4700::1111"]) {
@@ -93,6 +100,8 @@ describe("download safety", () => {
     await expect(fetchMedia("http://127.0.0.1:8765/a.png", "/tmp/x")).rejects.toThrow(/local or private network/);
     await expect(fetchMedia("http://169.254.169.254/latest/meta-data", "/tmp/x")).rejects.toThrow(/local or private network/);
     await expect(fetchMedia("http://localhost/a.png", "/tmp/x")).rejects.toThrow(/local or private network/);
+    await expect(fetchMedia("http://[::ffff:127.0.0.1]:8765/a.png", "/tmp/x")).rejects.toThrow(/local or private network/);
+    await expect(fetchMedia("http://[64:ff9b::7f00:1]/a.png", "/tmp/x")).rejects.toThrow(/local or private network/);
   });
 });
 
