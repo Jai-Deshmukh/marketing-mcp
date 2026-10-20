@@ -12,6 +12,10 @@ export const Scene = z.object({
   id: Id.describe('Short id, e.g. "s1"'),
   duration_s: z.number().positive(),
   vo: z.string().describe("Voiceover line for this scene; empty string if none"),
+  voice: z
+    .string()
+    .optional()
+    .describe("Voice for this scene's line, overriding the job's voice. Use it for dialogue: one voice per character, e.g. Tara and Rishi"),
   on_screen_text: z.string().optional().describe("Short text overlay, a few words"),
   visual_idea: z.string().min(1).describe("What the viewer sees, in plain language"),
 });
@@ -68,7 +72,7 @@ export const Asset = z.object({
   added_at: z.string(),
 });
 
-export const VoiceClip = z.object({ scene_id: z.string(), file: z.string(), duration_s: z.number() });
+export const VoiceClip = z.object({ scene_id: z.string(), file: z.string(), duration_s: z.number(), voice: z.string().optional() });
 
 export const Voiceover = z.object({
   engine: z.enum(["kokoro", "say"]),

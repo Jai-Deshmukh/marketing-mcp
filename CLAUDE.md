@@ -74,7 +74,7 @@ Brand kit, crew prompts and music are read from `src/` at runtime (no rebuild ne
 | `save_shot_list` | done | every scene covered, total matches script; shots are `video` or `image` (still + pan/zoom) |
 | `job_status`, `list_jobs` | done | |
 | `add_asset` | done | batch of {shot_id, source}; each item fails independently; warns on short clips / kind mismatch |
-| `generate_voiceover` | done | background task; en → Kokoro af_heart, hi → Kokoro hf_alpha, hinglish → say "Aman"; warns if a line overruns its scene |
+| `generate_voiceover` | done | background task; en → Kokoro af_heart, hi → Kokoro hf_alpha, hinglish → say "Aman"; a scene's own `voice` overrides the job voice (dialogue: one voice per character); warns if a line overruns its scene |
 | `pick_music` | done | no mood = list moods; `none: true` = no music; `variation` rotates tracks |
 | `assemble_video` | done | background task; `placeholders: true` for timing previews; captions, titles, end card, ducked music, loudnorm to ~-14 LUFS |
 

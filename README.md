@@ -62,6 +62,7 @@ Things you can say along the way:
 | "Preview the timing with placeholders" | Renders a rough cut before any visuals exist (free) |
 | "Redo shot 3 as a close-up" | Regenerates just that shot |
 | "Use a British male voice" / "slower voice" | Re-records the voiceover |
+| "Make it a dialogue: Tara for the bee, Rishi for him" | Gives each character their own voice |
 | "Upbeat music" / "calm music" / "no music" | Changes the background track |
 | "Also export 16:9" | Makes a landscape version from the same footage (no extra credits) |
 | "Make it in Hindi" / "Hinglish" | Hindi or Hinglish script and voice |

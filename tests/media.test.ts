@@ -7,7 +7,7 @@ import { extFor, fetchMedia, isPrivateAddress, kindForExt } from "../src/media/d
 import { contrastText, hexOr, kenBurnsFilter, reframeFilter } from "../src/media/layout.js";
 import { listTracks, moods, pickTrack } from "../src/music.js";
 import type { Script } from "../src/schemas.js";
-import { chooseVoice } from "../src/voice/tts.js";
+import { chooseVoice, planVoices } from "../src/voice/tts.js";
 
 const script: Script = {
   title: "t",
@@ -142,5 +142,34 @@ describe("voice choice", () => {
   it("routes a requested voice to the right engine", () => {
     expect(chooseVoice("en", "bm_george", "auto", true)).toEqual({ engine: "kokoro", voice: "bm_george" });
     expect(chooseVoice("en", "Tara", "auto", true)).toEqual({ engine: "say", voice: "Tara" });
+  });
+});
+
+describe("planVoices", () => {
+  const scenes = [
+    { id: "s1", voice: "Rishi" },
+    { id: "s2", voice: "Tara" },
+    { id: "s3" },
+    { id: "s4", voice: "Rishi" },
+  ];
+
+  it("groups scenes by their own voice, in first-appearance order, with the job voice for the rest", () => {
+    expect(planVoices(scenes, "hinglish", "Tara", "auto", true)).toEqual([
+      { choice: { engine: "say", voice: "Rishi" }, sceneIds: ["s1", "s4"] },
+      { choice: { engine: "say", voice: "Tara" }, sceneIds: ["s2", "s3"] },
+    ]);
+  });
+
+  it("falls back to the language default when neither scene nor job names a voice", () => {
+    expect(planVoices([{ id: "a" }, { id: "b", voice: " " }], "en", undefined, "auto", true)).toEqual([
+      { choice: { engine: "kokoro", voice: "af_heart" }, sceneIds: ["a", "b"] },
+    ]);
+  });
+
+  it("applies engine fallbacks per scene", () => {
+    expect(planVoices([{ id: "a", voice: "af_bella" }, { id: "b", voice: "Tara" }], "en", undefined, "auto", false)).toEqual([
+      { choice: { engine: "say", voice: "Aman" }, sceneIds: ["a"] },
+      { choice: { engine: "say", voice: "Tara" }, sceneIds: ["b"] },
+    ]);
   });
 });

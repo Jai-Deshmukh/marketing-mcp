@@ -8,7 +8,7 @@ import { runTask, UserFacingError } from "../jobs/tasks.js";
 import { probe } from "../media/proc.js";
 import { listTracks, moods, pickTrack } from "../music.js";
 import type { Voiceover } from "../schemas.js";
-import { chooseVoice, kokoroAvailable, synthesize, VOICE_HELP } from "../voice/tts.js";
+import { chooseVoice, kokoroAvailable, planVoices, synthesize, VOICE_HELP } from "../voice/tts.js";
 import { bullets, fail, ok, toErrorResult } from "./result.js";
 
 const FREE_MUSIC_HELP =
@@ -35,7 +35,8 @@ export function registerAudioTools(server: McpServer, store: JobStore): void {
       try {
         const job = await store.get(job_id);
         if (!job.script) return fail(`Job ${job_id} has no script yet. Call save_script first.`);
-        const choice = chooseVoice(job.language, voice, config.voiceEngine, await kokoroAvailable());
+        const hasKokoro = await kokoroAvailable();
+        const choice = chooseVoice(job.language, voice, config.voiceEngine, hasKokoro);
 
         const outcome = await runTask(store, job_id, "voiceover", async () => {
           const dir = path.join(store.jobDir(job_id), "audio");
@@ -45,13 +46,20 @@ export function registerAudioTools(server: McpServer, store: JobStore): void {
           if (!scenes.length) throw new UserFacingError("The script has no voiceover lines.");
 
           const items = scenes.map((s) => ({ text: s.vo, out: path.join(dir, `vo_${s.id}.wav`) }));
-          await synthesize(choice, speed, items);
+          // Dialogue: scenes may name their own voice. Record each voice's lines in one batch.
+          const groups = planVoices(scenes, job.language, voice, config.voiceEngine, hasKokoro);
+          const voiceOf = new Map<string, string>();
+          for (const group of groups) {
+            const batch = items.filter((_, i) => group.sceneIds.includes(scenes[i].id));
+            await synthesize(group.choice, speed, batch);
+            for (const id of group.sceneIds) voiceOf.set(id, group.choice.voice);
+          }
 
           const clips: Voiceover["clips"] = [];
           const warnings: string[] = [];
           for (const [i, scene] of scenes.entries()) {
             const duration_s = (await probe(items[i].out)).duration_s ?? 0;
-            clips.push({ scene_id: scene.id, file: path.relative(store.jobDir(job_id), items[i].out), duration_s });
+            clips.push({ scene_id: scene.id, file: path.relative(store.jobDir(job_id), items[i].out), duration_s, voice: voiceOf.get(scene.id) });
             if (duration_s > scene.duration_s) {
               warnings.push(`Scene ${scene.id}: line takes ${duration_s.toFixed(1)}s but the scene is ${scene.duration_s}s; it will be cut off. Shorten the line or speed up.`);
             }
@@ -63,7 +71,9 @@ export function registerAudioTools(server: McpServer, store: JobStore): void {
           }));
           const spoken = clips.reduce((t, c) => t + c.duration_s, 0);
           return [
-            `Voiceover ready: ${clips.length} lines, ${spoken.toFixed(1)}s of speech, voice ${choice.voice} (${choice.engine}).`,
+            groups.length > 1
+              ? `Voiceover ready: ${clips.length} lines, ${spoken.toFixed(1)}s of speech, ${groups.length} voices: ${groups.map((g) => `${g.choice.voice} (${g.choice.engine}, ${g.sceneIds.length} line${g.sceneIds.length === 1 ? "" : "s"})`).join(", ")}.`
+              : `Voiceover ready: ${clips.length} lines, ${spoken.toFixed(1)}s of speech, voice ${groups[0].choice.voice} (${groups[0].choice.engine}).`,
             ...(warnings.length ? [`Warnings:\n${bullets(warnings)}`] : []),
           ].join("\n");
         });

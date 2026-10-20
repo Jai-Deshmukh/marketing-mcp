@@ -11,5 +11,6 @@ Rules:
 - End with a clear, simple CTA.
 - No hype words, no invented stats, claims or testimonials.
 - If the language is Hinglish, write the VO in Roman script.
+- For dialogue, give each scene the `voice` of whoever speaks it (one voice per character, e.g. Tara and Rishi for Indian English). One speaker per scene; split a back-and-forth into separate scenes.
 
 When the script is ready, show it to the user briefly, then call `save_script` with the job_id and the script.
